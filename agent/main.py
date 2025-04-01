@@ -133,7 +133,7 @@ if __name__ == "__main__":
 
     # === 9. Save training and evaluation charts ===
     plot_training_curve(reward_history, save_path=curve_path)
-    plot_evaluation_metrics(evaluation_result, save_path=metrics_path)
+    # plot_evaluation_metrics(evaluation_result, save_path=metrics_path)
     create_evaluation_gif(frames, save_path=gif_path)
     mp4_path = os.path.join(video_dir, f"evaluation_episode_{timestamp}.mp4")
     imageio.mimsave(mp4_path, frames, fps=30)
