@@ -8,6 +8,8 @@ from simple_driving.resources.plane import Plane
 from simple_driving.resources.goal import Goal
 import matplotlib.pyplot as plt
 import time
+import os
+import random
 
 RENDER_HEIGHT = 720
 RENDER_WIDTH = 960
@@ -15,7 +17,11 @@ RENDER_WIDTH = 960
 class SimpleDrivingEnv(gym.Env):
     metadata = {'render.modes': ['human', 'fp_camera', 'tp_camera']}
 
-    def __init__(self, isDiscrete=True, renders=False):
+    def __init__(self, isDiscrete=True, renders=False, num_obstacles=0):
+        self._path = os.path.dirname(__file__)
+        self.num_obstacles = num_obstacles  # Number of obstacles in the environment,
+                                # You can change this number later dynamically
+
         if (isDiscrete):
             self.action_space = gym.spaces.Discrete(9)
         else:
@@ -84,6 +90,7 @@ class SimpleDrivingEnv(gym.Env):
             #print("reached goal")
             self.done = True
             self.reached_goal = True
+            reward += 300   # Reward for reaching goal
 
         ob = car_ob
         return ob, reward, self.done, dict()
@@ -109,6 +116,42 @@ class SimpleDrivingEnv(gym.Env):
         self.goal = (x, y)
         self.done = False
         self.reached_goal = False
+
+        # obstacle_path = os.path.join(self._path, "..", "resources/simplegoal.urdf")
+        # obstacle_pos = [2, 2, 0]  
+        # self.obstacle = self._p.loadURDF(obstacle_path, basePosition=obstacle_pos)
+        # self.obstacle_pos = obstacle_pos[:2]  
+
+        # Create multiple random red obstacles
+        self.obstacles = []
+        self.obstacle_pos_list = []
+        red_rgba = [1, 0, 0, 1]
+
+        for _ in range(self.num_obstacles):
+            obs_x = self.np_random.uniform(-4, 4)
+            obs_y = self.np_random.uniform(-4, 4)
+            obs_pos = [obs_x, obs_y, 0]
+
+            radius = self.np_random.uniform(0.4, 0.8)
+
+            visual_shape_id = self._p.createVisualShape(
+                shapeType=self._p.GEOM_SPHERE,
+                radius=radius,
+                rgbaColor=red_rgba
+            )
+            collision_shape_id = self._p.createCollisionShape(
+                shapeType=self._p.GEOM_SPHERE,
+                radius=radius
+            )
+            obstacle_id = self._p.createMultiBody(
+                baseMass=0,
+                baseCollisionShapeIndex=collision_shape_id,
+                baseVisualShapeIndex=visual_shape_id,
+                basePosition=obs_pos
+            )
+
+            self.obstacles.append(obstacle_id)
+            self.obstacle_pos_list.append(obs_pos[:2])
 
         # Visual element of the goal
         self.goal_object = Goal(self._p, self.goal)
@@ -183,7 +226,20 @@ class SimpleDrivingEnv(gym.Env):
         invCarPos, invCarOrn = self._p.invertTransform(carpos, carorn)
         goalPosInCar, goalOrnInCar = self._p.multiplyTransforms(invCarPos, invCarOrn, goalpos, goalorn)
 
-        observation = [goalPosInCar[0], goalPosInCar[1]]
+        # obstaclepos, obstacleorn = self._p.getBasePositionAndOrientation(self.obstacle)
+        # obsPosInCar, _ = self._p.multiplyTransforms(invCarPos, invCarOrn, obstaclepos, obstacleorn)
+
+        # observation = [goalPosInCar[0], goalPosInCar[1],
+        #                obsPosInCar[0], obsPosInCar[1]]
+
+        obs_relative_positions = []
+        for obstacle_id in self.obstacles:
+            obstaclepos, obstacleorn = self._p.getBasePositionAndOrientation(obstacle_id)
+            obs_pos_in_car, _ = self._p.multiplyTransforms(invCarPos, invCarOrn, obstaclepos, obstacleorn)
+            obs_relative_positions.extend([obs_pos_in_car[0], obs_pos_in_car[1]])
+
+        observation = [goalPosInCar[0], goalPosInCar[1]] + obs_relative_positions
+
         return observation
 
     def _termination(self):
